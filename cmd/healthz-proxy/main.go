@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	log "github.com/sirupsen/logrus"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -12,6 +11,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -23,7 +24,9 @@ var (
 )
 
 const (
-	Healthy   = 1
+	// Healthy indicates that we should proxy health checks
+	Healthy = 1
+	// Unhealthy indicates that we should fail health checks
 	Unhealthy = 0
 )
 

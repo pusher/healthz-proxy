@@ -9,7 +9,6 @@ COPY go.sum go.sum
 
 RUN go mod download
 
-# COPY pkg/    pkg/
 COPY cmd/ cmd/
 
 # Build
