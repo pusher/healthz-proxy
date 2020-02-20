@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -51,7 +51,6 @@ func newServer(origin *url.URL, logger *log.Logger) *http.Server {
 	return &http.Server{
 		Addr:         listenAddr,
 		Handler:      router,
-		ErrorLog:     logger,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  15 * time.Second,
@@ -60,19 +59,19 @@ func newServer(origin *url.URL, logger *log.Logger) *http.Server {
 
 func gracefulShutdown(server *http.Server, logger *log.Logger, quit <-chan os.Signal, done chan<- bool) {
 	<-quit
-	logger.Printf("failing health checks for %v\n", failPeriod)
+	logger.Infof("failing health checks for %v", failPeriod)
 	atomic.StoreInt32(&healthy, Unhealthy)
 
 	time.AfterFunc(failPeriod, func() {
-		logger.Printf("terminate timeout exceeded, shutting down server with timeout %v\n", shutdownTimeout)
+		logger.Infof("fail period exceeded, shutting down server with timeout %v", shutdownTimeout)
 		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 
 		server.SetKeepAlivesEnabled(false)
 		if err := server.Shutdown(ctx); err != nil {
-			logger.Fatalf("could not gracefully shutdown the server: %v\n", err)
+			logger.Fatalf("could not gracefully shutdown the server: %v", err)
 		}
-		logger.Println("shutdown completed, closing done")
+		logger.Info("shutdown completed, closing done")
 		close(done)
 	})
 }
@@ -84,11 +83,13 @@ func main() {
 	flag.DurationVar(&failPeriod, "fail-period", 30*time.Second, "time to fail health checks for before stopping server")
 	flag.Parse()
 
-	logger := log.New(os.Stdout, "http: ", log.LstdFlags)
+	logger := log.New()
+	logger.Out = os.Stdout
+	logger.SetFormatter(&log.JSONFormatter{})
 
 	healthzURL, err := url.Parse(proxyURL)
 	if err != nil {
-		logger.Fatalf("could not parse proxy URL %v\n", proxyURL, err)
+		logger.Fatalf("could not parse proxy URL %v: %v", proxyURL, err)
 	}
 	atomic.StoreInt32(&healthy, Healthy)
 
@@ -100,11 +101,11 @@ func main() {
 	server := newServer(healthzURL, logger)
 	go gracefulShutdown(server, logger, quit, done)
 
-	logger.Printf("server starting on %v, proxying requests to %v\n", listenAddr, healthzURL)
+	logger.Infof("server starting on %v, proxying requests to %v", listenAddr, healthzURL)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		logger.Fatalf("could not listen on %s: %v\n", listenAddr, err)
+		logger.Fatalf("could not listen on %s: %v", listenAddr, err)
 	}
 
 	<-done
-	logger.Println("server stopped")
+	logger.Info("server stopped")
 }
